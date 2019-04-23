@@ -1,10 +1,57 @@
+# install.packages("ggplot2");
 library(ggplot2)
 
-plot_data_bar2 <- function(xname, xdata, yname, ydata){
-  print(xdata)
-  print(ydata)
-  data=data.frame(name=xdata,  value=ydata)
-  ggplot(data, aes(x=xname, y=value)) + geom_bar(stat = "identity")
+# sec_axis not works on R version 3.4.1
+#          but works on R version 3.5.3
+#
+# R is upgraded with a newer package from
+#   https://mirror.its.sfu.ca/mirror/CRAN/
+
+data_norm <- function(data) {
+  data[1]/data  #return
+}
+
+data_ratio <- function(data) {
+  max(data)/min(data)
+}
+
+# http://www.sthda.com/english/wiki/ggplot2-barplots-quick-start-guide-r-software-and-data-visualization
+# https://stackoverflow.com/questions/42919470/wrong-x-axis-order-when-using-geom-bar-with-character-x-object
+plot_data_bar2 <- function(mname, xname, xdata, yname, ydata, id){
+  #print(xdata)
+  #print(ydata)
+  df=data.frame(thread=xdata,  value=ydata)
+  #print(df)
+  if(FALSE){
+  pp <- ggplot(data=df, aes(x=factor(thread, levels=thread), y=value)) + 
+    geom_bar(stat = "identity", fill = "steelblue", width=0.7) +
+    geom_text(aes(label=value), vjust=-1, color="black") +
+    #geom_line(aes(y=value), color="red")+
+    theme_minimal()+
+    ggtitle(mname)
+  }
+  if(TRUE){
+    n=8
+    ratio=data_norm(ydata)
+    range_label=ceiling(seq(0, max(ratio), max(ratio)/n))
+    range_value=ceiling(max(ydata)/max(ratio)*range_label)
+    ratio2=max(ydata)/max(ratio)*ratio
+  pp <- ggplot(data=df, aes(factor(thread, levels=thread), value)) +
+    geom_col(fill = "steelblue", width=0.5) +
+    geom_line(aes(factor(thread, levels=thread), ratio2), color="red",  group = 1) +
+    geom_point(aes(factor(thread, levels=thread), ratio2), size=3, shape=21, fill="white") +
+    #geom_text(aes(label=ratio2), color="black") + 
+    scale_y_continuous(
+      "Execution Time (ms)",
+      sec.axis = dup_axis(name = "Speedup",  breaks = range_value, labels = range_label)
+    ) + 
+    labs(x=xname) +
+    ggtitle(mname)
+    pp <- pp + 
+      theme(axis.text.y.right = element_text(color = "red"))
+  }
+  print(pp)
+  pp
 }
 
 plot_data_bar <- function(mname, xname, xdata, yname, ydata, id){
@@ -34,11 +81,9 @@ plot_data_multiple_init <- function(file_dim, file_name){
   par(mfrow=file_dim, mar = c(2,3.5,2,1), ps=11)  # font-size 12pt
 }
 
-data_norm <- function(data) {
-  data[1]/data  #return
-}
+# ---------------------------- plot_data_all ----------------------------
 
-plot_data <- function (input_file, plot_type="line", plot_norm=FALSE, output_file) {
+plot_data_all <- function (input_file, plot_type="line", plot_norm=FALSE, output_file) {
   data <- read.csv(input_file)
   #print(data[[1]])
   #print(nrow(data))
@@ -65,9 +110,41 @@ plot_data <- function (input_file, plot_type="line", plot_norm=FALSE, output_fil
 }
 
 # sf1
-plot_data("./hyper-sf1.csv", output_file = "plot-sf1")
-#plot_data("./hyper-sf1.csv", plot_norm=TRUE, output_file = "plot-sf1-norm")
+#plot_data_all("./hyper-sf1.csv", output_file = "plot-sf1")
+#plot_data_all("./hyper-sf1.csv", plot_norm=TRUE, output_file = "plot-sf1-norm")
 
 # sf10
-#plot_data("./hyper-sf10.csv", output_file = "plot-sf10")
-#plot_data("./hyper-sf10.csv", plot_norm=TRUE, output_file = "plot-sf10-norm")
+#plot_data_all("./hyper-sf10.csv", output_file = "plot-sf10")
+#plot_data_all("./hyper-sf10.csv", plot_norm=TRUE, output_file = "plot-sf10-norm")
+
+# ---------------------------- plot_data_single ----------------------------
+plot_data_partial <- function (input_file, 
+                               plot_type="line",
+                               plot_norm=FALSE,
+                               output_file,
+                               plot_id) {
+  data <- read.csv(input_file)
+  output_file <- paste(output_file, "-q", plot_id, ".eps", sep="")
+  #plot_data_multiple_init(c(1,1), output_file)
+  id <- plot_id
+  col_caption = "Number of threads"
+  row_caption = "Execution time (ms)"
+  col_names = colnames(data)[2:ncol(data)]
+  row_value = as.numeric(data[id, ])[2:ncol(data)]
+  if (plot_norm) {
+    row_value = data_norm(row_value)
+  }
+  main_name = as.vector(data[[1]])[id]
+  if (plot_type == "bar") {
+    # plot_data_bar(main_name, col_caption, col_names, row_caption, row_value, id)
+    g = plot_data_bar2(main_name, col_caption, col_names, row_caption, row_value, id)
+  }
+  else if (plot_type == "line") {
+    g = plot_data_line(main_name, col_caption, col_names, row_caption, row_value, id)
+  }
+  #dev.off()  # or graphics.off()
+  ggsave(g, file=output_file, device="eps", width=4, height=3) # save to a file
+}
+
+plot_data_partial("./hyper-sf1.csv", plot_type = "bar", output_file = "plot-sf1", plot_id = 3)
+
